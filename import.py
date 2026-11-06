@@ -7,11 +7,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 import json
 
-DB_PATH = r"C:\laragon\www\database_hasil5\database.sqlite"
-RSS_FILE = r"C:\laragon\www\rss_list.txt"
-OUTPUT_DIR = r"C:\laragon\www"
-BASE_URL = "https://thenewsday112.github.io/tekno"
-
+DB_PATH = "database.sqlite"
+RSS_FILE = "rss_list.txt"
+OUTPUT_DIR = "."
+BASE_URL = "https://thenewsday112.github.io/semuaartikel"
 # Header HTTP agar scraping tidak diblokir
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
