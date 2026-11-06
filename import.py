@@ -429,7 +429,7 @@ def export_to_two_files():
 
         for idx, item in enumerate(chunk):
             artikel_id, judul, konten, gambar, tanggal_publish, tanggal_update, link = item
-            safe_title = str(judul).replace('"', '').replace("'", '').replace('/', '_').replace('\', '_')
+            safe_title = str(judul).replace('"', '').replace("'", '').replace('/', '_').replace('\\', '_')
             
             try:
                 tgl_pub = datetime.fromisoformat(tanggal_publish.replace('Z', '+00:00')).strftime('%d %B %Y') if tanggal_publish else '-'
@@ -489,8 +489,7 @@ def export_to_two_files():
 </html>""")
 
         with open(output_file, "w", encoding="utf-8") as f:
-            f.write("
-".join(html_parts))
+            f.write("\n".join(html_parts))
 
         print(f"✅ HTML + SEO: {output_file} ({len(chunk)} artikel)")
 
