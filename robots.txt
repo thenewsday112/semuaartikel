@@ -2,7 +2,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://thenewsday112.github.io/tekno/sitemap.xml
+Sitemap: https://thenewsday112.github.io/semuaartikel/sitemap.xml
 
 # Crawl delay
 Crawl-delay: 1
