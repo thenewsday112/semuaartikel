@@ -34,11 +34,7 @@ jobs:
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: python import.py
 
-      # 5. Jalankan skrip export.py
-      - name: Run export.py
-        env:
-          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
-        run: python export.py
+     
 
       # 6. Commit & Push otomatis jika ada file baru/perubahan dari hasil eksekusi skrip
       - name: Commit and Push Changes
