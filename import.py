@@ -1,16 +1,18 @@
+import os
+import json
 import sqlite3
 import feedparser
 import requests
 from bs4 import BeautifulSoup
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
-import json
+from datetime import datetime
 
+# --- KONFIGURASI PATH & DOMAIN ---
 DB_PATH = "database.sqlite"
 RSS_FILE = "rss_list.txt"
 OUTPUT_DIR = "."
-BASE_URL = "https://thenewsday112.github.io/semuaartikel"
+BASE_URL = "https://thenewsday112.github.io/tekno"
+
 # Header HTTP agar scraping tidak diblokir
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -35,10 +37,12 @@ ADSTERRA_CODE = """
 """
 
 # --------------------------------------------------------------------------
-# INISIALISASI DATABASE (tambah kolom tanggal)
+# INISIALISASI DATABASE
 # --------------------------------------------------------------------------
 def init_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -53,7 +57,6 @@ def init_db():
         )
     """)
     
-    # Cek apakah kolom baru sudah ada, kalau belum tambahkan
     cursor.execute("PRAGMA table_info(artikel)")
     columns = [col[1] for col in cursor.fetchall()]
     
@@ -79,13 +82,11 @@ def extract_full_content(url):
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Ambil gambar OG
         image_url = None
         og_image = soup.find('meta', property='og:image') or soup.find('meta', attrs={'name': 'og:image'})
         if og_image and og_image.get('content'):
             image_url = og_image['content']
         
-        # Ambil tanggal publish
         tanggal = None
         for meta_prop in ['article:published_time', 'article:modified_time', 'datePublished']:
             meta = soup.find('meta', property=meta_prop) or soup.find('meta', attrs={'name': meta_prop})
@@ -93,7 +94,6 @@ def extract_full_content(url):
                 tanggal = meta['content']
                 break
         
-        # Ambil paragraf
         paragraphs = soup.find_all('p')
         full_text = []
         for p in paragraphs:
@@ -132,20 +132,17 @@ def process_single_feed(feed_url):
             if not link:
                 continue
 
-            # Cek duplikat
             cursor.execute("SELECT id FROM artikel WHERE link = ?", (link,))
             if cursor.fetchone():
                 duplikat += 1
                 continue
 
-            # Extract konten lengkap
             full_text_html, image_url, tanggal = extract_full_content(link)
             
             if not full_text_html:
                 summary = entry.get('summary', entry.get('description', 'Konten tidak tersedia.'))
                 full_text_html = f"<p>{summary}</p>"
             
-            # Fallback tanggal
             if not tanggal:
                 published_parsed = entry.get('published_parsed')
                 if published_parsed:
@@ -155,10 +152,8 @@ def process_single_feed(feed_url):
             
             tanggal_update = datetime.now().isoformat()
             
-            # Gambar
             img_tag = f'<div style="text-align:center; margin-bottom:20px;"><img src="{image_url}" alt="{judul}" style="max-width:100%; height:auto; border-radius:8px;" loading="lazy"></div>' if image_url else ""
             
-            # Konten lengkap dengan iklan
             konten_lengkap = f"""
             {img_tag}
             {ADSTERRA_CODE}
@@ -209,7 +204,6 @@ def generate_sitemap():
     xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>']
     xml_parts.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
     
-    # Homepage
     xml_parts.append(f"""
     <url>
         <loc>{BASE_URL}/</loc>
@@ -218,7 +212,6 @@ def generate_sitemap():
         <priority>1.0</priority>
     </url>""")
     
-    # Part 1
     xml_parts.append(f"""
     <url>
         <loc>{BASE_URL}/artikel_part1.html</loc>
@@ -227,7 +220,6 @@ def generate_sitemap():
         <priority>1.0</priority>
     </url>""")
     
-    # Part 2
     xml_parts.append(f"""
     <url>
         <loc>{BASE_URL}/artikel_part2.html</loc>
@@ -236,7 +228,6 @@ def generate_sitemap():
         <priority>0.9</priority>
     </url>""")
     
-    # Detail artikel (anchor)
     for artikel_id, tanggal_update in articles:
         lastmod = tanggal_update[:10] if tanggal_update else today
         xml_parts.append(f"""
@@ -281,7 +272,6 @@ Crawl-delay: 1
 # GENERATE SCHEMA JSON-LD PER ARTIKEL
 # --------------------------------------------------------------------------
 def generate_article_schema(artikel_id, judul, gambar, tanggal_publish, tanggal_update, link):
-    """Generate JSON-LD NewsArticle untuk SEO"""
     schema = {
         "@context": "https://schema.org",
         "@type": "NewsArticle",
@@ -315,7 +305,7 @@ def generate_article_schema(artikel_id, judul, gambar, tanggal_publish, tanggal_
 
 
 # --------------------------------------------------------------------------
-# EXPORT KE 2 FILE HTML DENGAN SEO LENGKAP
+# EXPORT KE 2 FILE HTML
 # --------------------------------------------------------------------------
 def export_to_two_files():
     if not os.path.exists(DB_PATH):
@@ -342,7 +332,6 @@ def export_to_two_files():
         output_file = os.path.join(OUTPUT_DIR, filename)
         canonical_url = f"{BASE_URL}/{filename}"
         
-        # Ambil judul untuk meta description
         sample_titles = ", ".join([row[1][:50] for row in chunk[:5]])
         meta_desc = f"Kumpulan berita terbaru: {sample_titles}. Update harian dengan informasi terpercaya."
         meta_desc = meta_desc[:160]
@@ -366,7 +355,6 @@ def export_to_two_files():
     
     <link rel="canonical" href="{canonical_url}">
     
-    <!-- Open Graph -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="Portal Berita Terkini - {part_name}">
     <meta property="og:description" content="{meta_desc}">
@@ -374,19 +362,13 @@ def export_to_two_files():
     <meta property="og:site_name" content="Portal Berita Indonesia">
     <meta property="og:locale" content="id_ID">
     
-    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Portal Berita Terkini - {part_name}">
     <meta name="twitter:description" content="{meta_desc}">
     
-    <!-- Google Search Console Verification (GANTI DENGAN KODE ANDA) -->
-    <meta name="google-site-verification" content="GANTI_DENGAN_KODE_GSC_ANDA">
-    
-    <!-- Preconnect -->
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
     
-    <!-- Schema JSON-LD CollectionPage -->
     <script type="application/ld+json">
     {{
       "@context": "https://schema.org",
@@ -445,21 +427,17 @@ def export_to_two_files():
         </div>
         <div id="pdf-content">""")
 
-        # Render setiap artikel
         for idx, item in enumerate(chunk):
             artikel_id, judul, konten, gambar, tanggal_publish, tanggal_update, link = item
-            safe_title = str(judul).replace('"', '').replace("'", '').replace('/', '_').replace('\\', '_')
+            safe_title = str(judul).replace('"', '').replace("'", '').replace('/', '_').replace('\', '_')
             
-            # Format tanggal
             try:
                 tgl_pub = datetime.fromisoformat(tanggal_publish.replace('Z', '+00:00')).strftime('%d %B %Y') if tanggal_publish else '-'
-            except:
+            except Exception:
                 tgl_pub = tanggal_publish[:10] if tanggal_publish else '-'
             
-            # Schema NewsArticle per artikel
             article_schema = generate_article_schema(artikel_id, judul, gambar, tanggal_publish, tanggal_update, link)
             
-            # Related articles (3 artikel berikutnya)
             related = chunk[idx+1:idx+4]
             related_html = ""
             if related:
@@ -511,7 +489,8 @@ def export_to_two_files():
 </html>""")
 
         with open(output_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(html_parts))
+            f.write("
+".join(html_parts))
 
         print(f"✅ HTML + SEO: {output_file} ({len(chunk)} artikel)")
 
@@ -558,14 +537,8 @@ def scrape_massive_rss():
     generate_robots()
     
     print("\n" + "="*45)
-    print("[SELESAI] File siap di-deploy ke Surge.sh!")
+    print("[SELESAI] Proses pemrosesan selesai!")
     print("="*45)
-    print("\n📋 Checklist Deploy:")
-    print("1. Upload semua file ke Surge.sh")
-    print("2. Verifikasi Google Search Console")
-    print("3. Submit sitemap.xml ke GSC")
-    print("4. Request indexing halaman utama")
-    print("5. Tunggu 1-4 minggu untuk hasil")
 
 
 if __name__ == "__main__":
