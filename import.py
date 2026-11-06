@@ -188,11 +188,9 @@ def process_single_feed(feed_url):
 
 
 # --------------------------------------------------------------------------
-# GENERATE SITEMAP.XML
+# GENERATE SITEMAP.XML & ROBOTS.TXT
 # --------------------------------------------------------------------------
-def generate_sitemap():
-    sitemap_path = os.path.join(OUTPUT_DIR, "sitemap.xml")
-    
+def generate_sitemap_and_robots():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT id, tanggal_update FROM artikel ORDER BY id DESC")
@@ -201,111 +199,31 @@ def generate_sitemap():
     
     today = datetime.now().strftime('%Y-%m-%d')
     
+    # Sitemap
+    sitemap_path = os.path.join(OUTPUT_DIR, "sitemap.xml")
     xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>']
     xml_parts.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
-    
-    xml_parts.append(f"""
-    <url>
-        <loc>{BASE_URL}/</loc>
-        <lastmod>{today}</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>1.0</priority>
-    </url>""")
-    
-    xml_parts.append(f"""
-    <url>
-        <loc>{BASE_URL}/artikel_part1.html</loc>
-        <lastmod>{today}</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>1.0</priority>
-    </url>""")
-    
-    xml_parts.append(f"""
-    <url>
-        <loc>{BASE_URL}/artikel_part2.html</loc>
-        <lastmod>{today}</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>0.9</priority>
-    </url>""")
+    xml_parts.append(f'<url><loc>{BASE_URL}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>')
+    xml_parts.append(f'<url><loc>{BASE_URL}/artikel_part1.html</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>')
+    xml_parts.append(f'<url><loc>{BASE_URL}/artikel_part2.html</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>')
     
     for artikel_id, tanggal_update in articles:
         lastmod = tanggal_update[:10] if tanggal_update else today
-        xml_parts.append(f"""
-    <url>
-        <loc>{BASE_URL}/artikel_part1.html#artikel-{artikel_id}</loc>
-        <lastmod>{lastmod}</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.7</priority>
-    </url>""")
-    
+        xml_parts.append(f'<url><loc>{BASE_URL}/artikel_part1.html#artikel-{artikel_id}</loc><lastmod>{lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>')
     xml_parts.append('</urlset>')
     
     with open(sitemap_path, "w", encoding="utf-8") as f:
         f.write("\n".join(xml_parts))
     
-    print(f"✅ Sitemap: {sitemap_path} ({len(articles)} artikel)")
-
-
-# --------------------------------------------------------------------------
-# GENERATE ROBOTS.TXT
-# --------------------------------------------------------------------------
-def generate_robots():
+    # Robots
     robots_path = os.path.join(OUTPUT_DIR, "robots.txt")
-    
-    content = f"""User-agent: *
-Allow: /
-
-# Sitemap
-Sitemap: {BASE_URL}/sitemap.xml
-
-# Crawl delay
-Crawl-delay: 1
-"""
-    
+    robots_content = f"User-agent: *\nAllow: /\nSitemap: {BASE_URL}/sitemap.xml\nCrawl-delay: 1\n"
     with open(robots_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    
-    print(f"✅ Robots.txt: {robots_path}")
+        f.write(robots_content)
 
 
 # --------------------------------------------------------------------------
-# GENERATE SCHEMA JSON-LD PER ARTIKEL
-# --------------------------------------------------------------------------
-def generate_article_schema(artikel_id, judul, gambar, tanggal_publish, tanggal_update, link):
-    schema = {
-        "@context": "https://schema.org",
-        "@type": "NewsArticle",
-        "headline": judul[:110],
-        "image": [gambar] if gambar else [],
-        "datePublished": tanggal_publish or datetime.now().isoformat(),
-        "dateModified": tanggal_update or datetime.now().isoformat(),
-        "author": {
-            "@type": "Organization",
-            "name": "Portal Berita Indonesia",
-            "url": BASE_URL
-        },
-        "publisher": {
-            "@type": "Organization",
-            "name": "Portal Berita Indonesia",
-            "logo": {
-                "@type": "ImageObject",
-                "url": f"{BASE_URL}/logo.png",
-                "width": 600,
-                "height": 60
-            }
-        },
-        "description": f"Baca berita terbaru: {judul[:160]}",
-        "mainEntityOfPage": {
-            "@type": "WebPage",
-            "@id": f"{BASE_URL}/artikel_part1.html#artikel-{artikel_id}"
-        },
-        "url": link
-    }
-    return json.dumps(schema, ensure_ascii=False, indent=2)
-
-
-# --------------------------------------------------------------------------
-# EXPORT KE 2 FILE HTML
+# EXPORT KE 2 FILE HTML (LAYOUT KATALOG GRID / INTERAKTIF)
 # --------------------------------------------------------------------------
 def export_to_two_files():
     if not os.path.exists(DB_PATH):
@@ -331,11 +249,8 @@ def export_to_two_files():
     for filename, chunk, part_name, other_part in parts:
         output_file = os.path.join(OUTPUT_DIR, filename)
         canonical_url = f"{BASE_URL}/{filename}"
-        
         sample_titles = ", ".join([row[1][:50] for row in chunk[:5]])
-        meta_desc = f"Kumpulan berita terbaru: {sample_titles}. Update harian dengan informasi terpercaya."
-        meta_desc = meta_desc[:160]
-        
+        meta_desc = f"Katalog berita interaktif: {sample_titles}. Update harian dengan informasi terpercaya."[:160]
         today = datetime.now().strftime('%Y-%m-%d')
         
         html_parts = []
@@ -344,126 +259,227 @@ def export_to_two_files():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
-    <meta name="googlebot" content="index, follow">
-    <meta name="bingbot" content="index, follow">
-    
-    <title>Portal Berita Terkini - {part_name} | Update Harian</title>
+    <title>Portal Berita Interaktif - {part_name}</title>
     <meta name="description" content="{meta_desc}">
-    <meta name="keywords" content="berita terkini, info terbaru, update harian, berita Indonesia">
-    <meta name="author" content="Portal Berita Indonesia">
-    
     <link rel="canonical" href="{canonical_url}">
-    
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="Portal Berita Terkini - {part_name}">
-    <meta property="og:description" content="{meta_desc}">
-    <meta property="og:url" content="{canonical_url}">
-    <meta property="og:site_name" content="Portal Berita Indonesia">
-    <meta property="og:locale" content="id_ID">
-    
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Portal Berita Terkini - {part_name}">
-    <meta name="twitter:description" content="{meta_desc}">
-    
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-    
-    <script type="application/ld+json">
-    {{
-      "@context": "https://schema.org",
-      "@type": "CollectionPage",
-      "name": "Portal Berita Terkini - {part_name}",
-      "description": "{meta_desc}",
-      "url": "{canonical_url}",
-      "isPartOf": {{
-        "@type": "WebSite",
-        "name": "Portal Berita Indonesia",
-        "url": "{BASE_URL}"
-      }},
-      "dateModified": "{today}",
-      "inLanguage": "id-ID"
-    }}
-    </script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    
     <style>
-        body {{ font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; color: #333; }}
-        .container {{ max-width: 900px; margin: 0 auto; }}
-        .header-actions {{ text-align: center; margin-bottom: 30px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
-        .ad-container {{ margin: 20px 0; display: flex; justify-content: center; overflow: hidden; }}
-        .article-card {{ background: #fff; padding: 25px; margin-bottom: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); position: relative; }}
-        .article-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 15px; }}
-        .article-card h2 {{ color: #111; margin: 0; font-size: 20px; flex-grow: 1; }}
-        .article-meta {{ font-size: 12px; color: #888; margin-bottom: 15px; }}
-        .btn-pdf {{ background-color: #e74c3c; color: #ffffff; border: none; padding: 8px 14px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; white-space: nowrap; }}
-        .btn-pdf:hover {{ background-color: #c0392b; }}
-        .article-body {{ line-height: 1.6; }}
-        .related-articles {{ margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; }}
-        .related-articles h3 {{ margin-top: 0; font-size: 16px; color: #333; }}
-        .related-articles ul {{ list-style: none; padding: 0; }}
-        .related-articles li {{ margin: 8px 0; }}
-        .related-articles a {{ color: #0d6efd; text-decoration: none; }}
-        .related-articles a:hover {{ text-decoration: underline; }}
-        .pagination {{ text-align: center; margin: 40px 0; }}
-        .pagination a {{ display: inline-block; padding: 12px 24px; margin: 0 6px; background: #fff; border-radius: 6px; text-decoration: none; color: #333; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
-        .pagination a.active {{ background: #27ae60; color: #fff; }}
+        :root {{
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+        }}
+        .header-box {{
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            text-align: center;
+            margin-bottom: 30px;
+        }}
+        .header-box h1 {{
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            color: var(--text-main);
+        }}
+        .search-box {{
+            margin-top: 20px;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }}
+        .search-box input {{
+            width: 100%;
+            padding: 12px 20px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }}
+        .search-box input:focus {{
+            border-color: var(--primary);
+        }}
+        .grid-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }}
+        .article-card {{
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }}
+        .article-card:hover {{
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }}
+        .article-card img {{
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }}
+        .article-card h2 {{
+            font-size: 18px;
+            margin: 0 0 10px 0;
+            color: var(--text-main);
+            line-height: 1.4;
+        }}
+        .article-meta {{
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 15px;
+        }}
+        .card-actions {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--border);
+            padding-top: 15px;
+            margin-top: auto;
+        }}
+        .btn {{
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.2s;
+        }}
+        .btn:hover {{
+            background-color: var(--primary-dark);
+        }}
+        .btn-pdf {{
+            background-color: #ef4444;
+        }}
+        .btn-pdf:hover {{
+            background-color: #dc2626;
+        }}
+        .pagination {{
+            text-align: center;
+            margin: 40px 0;
+        }}
+        .pagination a {{
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 0 5px;
+            background: white;
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--text-main);
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }}
+        .pagination a.active {{
+            background: var(--primary);
+            color: white;
+        }}
+        /* Modal Detail Artikel */
+        .modal {{
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }}
+        .modal-content {{
+            background: white;
+            width: 100%;
+            max-width: 800px;
+            max-height: 85vh;
+            border-radius: 12px;
+            padding: 30px;
+            overflow-y: auto;
+            position: relative;
+        }}
+        .close-modal {{
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header-actions">
-            <h1>Katalog Berita & Artikel Terkini - {part_name}</h1>
-            <p>Menampilkan {len(chunk)} informasi pilihan dari total {total_articles} database berita.</p>
-            <p style="font-size: 12px; color: #888;">Terakhir update: {today}</p>
-            <div class="ad-container">
-                <script>
-                    atOptions = {{'key' : 'f9e40eb3b3cd05f1038aac7b36b33ad2', 'format' : 'iframe', 'height' : 90, 'width' : 728, 'params' : {{}}}};
-                </script>
-                <script src="https://upholdbrilliancerecast.com/f9e40eb3b3cd05f1038aac7b36b33ad2/invoke.js"></script>
+        <div class="header-box">
+            <h1>Katalog Berita & Artikel Interaktif - {part_name}</h1>
+            <p>Total {total_articles} artikel tersedia dalam direktori berita harian.</p>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Cari judul artikel..." onkeyup="filterArticles()">
             </div>
-            <p><a href="{other_part}" style="color: #27ae60; text-decoration: none; font-weight: bold;">📄 Lihat {("Bagian 2" if "1" in filename else "Bagian 1")} →</a></p>
+            <div style="margin-top: 15px;">
+                <a href="{other_part}" style="color: var(--primary); text-decoration: none; font-weight: bold;">📄 Beralih ke {("Bagian 2" if "1" in filename else "Bagian 1")} →</a>
+            </div>
         </div>
-        <div id="pdf-content">""")
 
-        for idx, item in enumerate(chunk):
+        <div class="grid-container" id="articleGrid">""")
+
+        for item in chunk:
             artikel_id, judul, konten, gambar, tanggal_publish, tanggal_update, link = item
             safe_title = str(judul).replace('"', '').replace("'", '').replace('/', '_').replace('\\', '_')
+            img_thumb = gambar if gambar else "https://via.placeholder.com/350x180?text=Portal+Berita"
             
             try:
-                tgl_pub = datetime.fromisoformat(tanggal_publish.replace('Z', '+00:00')).strftime('%d %B %Y') if tanggal_publish else '-'
+                tgl_pub = datetime.fromisoformat(tanggal_publish.replace('Z', '+00:00')).strftime('%d %b %Y') if tanggal_publish else '-'
             except Exception:
                 tgl_pub = tanggal_publish[:10] if tanggal_publish else '-'
-            
-            article_schema = generate_article_schema(artikel_id, judul, gambar, tanggal_publish, tanggal_update, link)
-            
-            related = chunk[idx+1:idx+4]
-            related_html = ""
-            if related:
-                related_html = '<div class="related-articles"><h3>📚 Baca Juga:</h3><ul>'
-                for rel in related:
-                    related_html += f'<li><a href="#artikel-{rel[0]}">#{rel[0]}. {rel[1][:80]}</a></li>'
-                related_html += '</ul></div>'
-            
+
             html_parts.append(f"""
-            <article class="article-card" id="artikel-{artikel_id}" itemscope itemtype="https://schema.org/NewsArticle">
-                <script type="application/ld+json">
-{article_schema}
-                </script>
-                <div class="article-header">
-                    <h2 itemprop="headline">#{artikel_id}. {judul}</h2>
-                    <button class="btn-pdf no-print" onclick="downloadSinglePDF('artikel-{artikel_id}', '{safe_title}')">📄 PDF</button>
+            <div class="article-card" data-title="{judul.lower()}">
+                <div>
+                    <img src="{img_thumb}" alt="{judul}" loading="lazy">
+                    <h2>#{artikel_id}. {judul}</h2>
+                    <div class="article-meta">📅 {tgl_pub}</div>
                 </div>
-                <div class="article-meta">
-                    <span itemprop="datePublished" content="{tanggal_publish}">📅 {tgl_pub}</span>
-                    {' | <a href="' + link + '" target="_blank" rel="nofollow" itemprop="url">Sumber</a>' if link else ''}
+                <div class="card-actions">
+                    <button class="btn" onclick="openModal({artikel_id})">📖 Baca Selengkapnya</button>
+                    <button class="btn btn-pdf" onclick="downloadPDF('content-{artikel_id}', '{safe_title}')">📄 PDF</button>
                 </div>
-                <div class="article-body" itemprop="articleBody">
+                <!-- Hidden content for modal & pdf -->
+                <div id="content-{artikel_id}" style="display:none;">
+                    <h2 style="color:#111;">{judul}</h2>
+                    <p style="font-size:12px; color:#666;">Tanggal: {tgl_pub} | Sumber: {link}</p>
+                    <hr style="border:0; border-top:1px solid #ddd; margin:15px 0;">
                     {konten}
                 </div>
-                {related_html}
-            </article>""")
+            </div>""")
 
         p1_active = "active" if filename == "artikel_part1.html" else ""
         p2_active = "active" if filename == "artikel_part2.html" else ""
@@ -475,14 +491,63 @@ def export_to_two_files():
             <a href="artikel_part2.html" class="{p2_active}">Bagian 2 ➡️</a>
         </div>
     </div>
-    
+
+    <!-- Modal Popup -->
+    <div id="articleModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
     <script>
-        function downloadSinglePDF(elementId, filename) {{
-            const element = document.getElementById(elementId);
-            const btn = element.querySelector('.btn-pdf');
-            btn.style.display = 'none';
-            const opt = {{ margin: 10, filename: filename + '.pdf', image: {{ type: 'jpeg', quality: 0.98 }}, html2canvas: {{ scale: 2, useCORS: true }}, jsPDF: {{ unit: 'mm', format: 'a4', orientation: 'portrait' }} }};
-            html2pdf().set(opt).from(element).save().then(() => {{ btn.style.display = 'inline-block'; }});
+        function filterArticles() {{
+            let input = document.getElementById('searchInput').value.toLowerCase();
+            let cards = document.getElementsByClassName('article-card');
+            for (let i = 0; i < cards.length; i++) {{
+                let title = cards[i].getAttribute('data-title');
+                if (title.includes(input)) {{
+                    cards[i].style.display = "";
+                }} else {{
+                    cards[i].style.display = "none";
+                }}
+            }}
+        }}
+
+        function openModal(id) {{
+            let content = document.getElementById('content-' + id).innerHTML;
+            document.getElementById('modalBody').innerHTML = content;
+            document.getElementById('articleModal').style.display = 'flex';
+        }}
+
+        function closeModal() {{
+            document.getElementById('articleModal').style.display = 'none';
+        }}
+
+        window.onclick = function(event) {{
+            let modal = document.getElementById('articleModal');
+            if (event.target == modal) {{
+                modal.style.display = 'none';
+            }}
+        }}
+
+        function downloadPDF(elementId, filename) {{
+            let element = document.getElementById(elementId);
+            // Temporarily show element content for PDF rendering
+            let originalDisplay = element.style.display;
+            element.style.display = 'block';
+            
+            const opt = {{
+                margin: 10,
+                filename: filename + '.pdf',
+                image: {{ type: 'jpeg', quality: 0.98 }},
+                html2canvas: {{ scale: 2, useCORS: true }},
+                jsPDF: {{ unit: 'mm', format: 'a4', orientation: 'portrait' }}
+            }};
+
+            html2pdf().set(opt).from(element).save().then(() => {{
+                element.style.display = originalDisplay;
+            }});
         }}
     </script>
 </body>
@@ -491,11 +556,11 @@ def export_to_two_files():
         with open(output_file, "w", encoding="utf-8") as f:
             f.write("\n".join(html_parts))
 
-        print(f"✅ HTML + SEO: {output_file} ({len(chunk)} artikel)")
+        print(f"✅ Katalog Grid HTML: {output_file} ({len(chunk)} artikel)")
 
 
 # --------------------------------------------------------------------------
-# SCRAPE MASSIVE RSS
+# SCRAPE UTAMA
 # --------------------------------------------------------------------------
 def scrape_massive_rss():
     if not os.path.exists(RSS_FILE):
@@ -507,14 +572,13 @@ def scrape_massive_rss():
     with open(RSS_FILE, "r", encoding="utf-8") as f:
         rss_urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-    print(f"[*] Memulai penarikan data FULL CONTENT + GAMBAR + OPTIMASI SEO dari {len(rss_urls)} sumber RSS...\n")
+    print(f"[*] Memulai penarikan data dari {len(rss_urls)} sumber RSS...\n")
 
     total_baru = 0
     total_duplikat = 0
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_single_feed, url): url for url in rss_urls}
-        
         for future in as_completed(futures):
             b, d = future.result()
             total_baru += b
@@ -522,21 +586,18 @@ def scrape_massive_rss():
 
     print("\n" + "="*45)
     print(f"[SELESAI PEMANENAN]")
-    print(f" - Berhasil disimpan (Artikel Baru) : {total_baru}")
-    print(f" - Dilewati (Sudah ada di DB)        : {total_duplikat}")
+    print(f" - Artikel Baru : {total_baru}")
+    print(f" - Duplikat/Eksis: {total_duplikat}")
     print("="*45)
 
-    print("\n[*] Generate HTML dengan SEO lengkap...")
+    print("\n[*] Generate Katalog HTML (Grid + Search + Modal)...")
     export_to_two_files()
     
-    print("\n[*] Generate sitemap.xml...")
-    generate_sitemap()
-    
-    print("\n[*] Generate robots.txt...")
-    generate_robots()
+    print("\n[*] Generate sitemap.xml & robots.txt...")
+    generate_sitemap_and_robots()
     
     print("\n" + "="*45)
-    print("[SELESAI] Proses pemrosesan selesai!")
+    print("[SELESAI] Proses build selesai dengan sukses!")
     print("="*45)
 
 
